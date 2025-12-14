@@ -1,0 +1,19 @@
+{
+  "name": "@web3-uni/hardhat",
+  "sourceRoot": "chain/hardhat/contracts",
+  "targets": {
+    "compile": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "yarn hardhat compile"
+      },
+      "outputs": ["packages/abi", "packages/contract-types"]
+    },
+    "export-abi": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "yarn hardhat export-abi"
+      }
+    }
+  }
+}

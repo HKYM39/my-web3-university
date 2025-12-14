@@ -1,0 +1,1270 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Web3 University Backend API",
+    "version": "1.0.0",
+    "description": "Web3 大学平台后端 API（学习者端 + 作者端 + 管理员端）。后端不托管资产，链上交易由前端钱包签名完成，后端负责签名登录、课程/内容管理、链上索引、学习进度与奖励记录、审核与风控。"
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com/api/v1",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "Local"
+    }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "钱包签名登录" },
+    { "name": "Public", "description": "公开接口（课程浏览等）" },
+    { "name": "Learner", "description": "学习者端（用户中心/学习/挖矿）" },
+    { "name": "Creator", "description": "课程作者端（课程管理/收益/AAVE）" },
+    { "name": "Admin", "description": "平台管理员端（审核/内容/风控）" }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/auth/nonce": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "获取登录 nonce（防重放）",
+        "description": "学习者/作者/管理员登录前获取 nonce。前端用 nonce 生成签名消息。",
+        "parameters": [
+          {
+            "name": "wallet",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "example": "0xAbC..." },
+            "description": "钱包地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "nonce 获取成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NonceResponse" }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "钱包签名登录（换取 JWT）",
+        "description": "前端使用 nonce 对指定消息进行签名，后端验签后下发 JWT。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LoginResponse" }
+              }
+            }
+          },
+          "401": { "description": "验签失败或 nonce 过期" }
+        },
+        "security": []
+      }
+    },
+
+    "/public/courses": {
+      "get": {
+        "tags": ["Public"],
+        "summary": "课程列表（公开）",
+        "description": "学习者端课程列表页。支持按状态/作者/关键词检索。",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "example": "PUBLISHED" },
+            "description": "课程状态：PUBLISHED 等"
+          },
+          {
+            "name": "authorWallet",
+            "in": "query",
+            "schema": { "type": "string", "example": "0xAuthor..." },
+            "description": "作者钱包地址"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": { "type": "string", "example": "Solidity" },
+            "description": "关键词"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "课程列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedCoursesResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/public/courses/{courseUid}": {
+      "get": {
+        "tags": ["Public"],
+        "summary": "课程详情（公开）",
+        "description": "学习者端课程详情页。返回课程基础信息与目录（公开视频信息/或需要购买后解锁的标识）。",
+        "parameters": [
+          {
+            "name": "courseUid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "example": "course-001" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "课程详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseDetailResponse"
+                }
+              }
+            }
+          },
+          "404": { "description": "课程不存在" }
+        },
+        "security": []
+      }
+    },
+
+    "/learner/profile": {
+      "get": {
+        "tags": ["Learner"],
+        "summary": "学习者：获取个人信息",
+        "description": "用户中心首页：钱包、昵称、角色、基础统计。",
+        "responses": {
+          "200": {
+            "description": "个人信息",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserProfileResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/learner/nickname": {
+      "post": {
+        "tags": ["Learner"],
+        "summary": "学习者：修改昵称（签名验证）",
+        "description": "用户中心修改昵称。前端对“Update nickname: <nickname>”签名，后端验签后写库。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateNicknameRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "修改成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OkResponse" }
+              }
+            }
+          },
+          "400": { "description": "参数不合法" },
+          "401": { "description": "验签失败" }
+        }
+      }
+    },
+    "/learner/courses": {
+      "get": {
+        "tags": ["Learner"],
+        "summary": "学习者：已购课程列表（基于索引）",
+        "description": "用户中心-我的课程。返回 user_courses 索引 + 课程信息。链上为准，必要时可配合 sync 接口刷新。",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已购课程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedPurchasedCoursesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/learner/courses/{courseUid}/access": {
+      "get": {
+        "tags": ["Learner"],
+        "summary": "学习者：检查课程访问权（是否已购）",
+        "description": "课程详情页/播放页在进入前可调用。返回是否持有课程 NFT（基于索引+可选链上校验）。",
+        "parameters": [
+          {
+            "name": "courseUid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "chainVerify",
+            "in": "query",
+            "schema": { "type": "boolean", "default": false },
+            "description": "是否强制链上校验（更慢）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "访问权结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseAccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/learner/learning/progress": {
+      "post": {
+        "tags": ["Learner"],
+        "summary": "学习者：上报学习进度",
+        "description": "视频播放页定时上报（例如每 30-60 秒），用于学习挖矿与学习统计。后端会做合理频率限制与幂等处理。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReportProgressRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "上报成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OkResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/learner/learning/progress/{courseUid}": {
+      "get": {
+        "tags": ["Learner"],
+        "summary": "学习者：获取某课程学习进度",
+        "parameters": [
+          {
+            "name": "courseUid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "进度",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProgressResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/learner/rewards/claim": {
+      "post": {
+        "tags": ["Learner"],
+        "summary": "学习者：领取学习挖矿奖励（触发链上发放）",
+        "description": "满足条件（>=80% 或每日签到）后，后端生成可领取结果并触发奖励合约交易（由后端的奖励执行账户发起）。如你希望完全去中心化，也可以改为返回 merkle proof 由用户自领，这里按 PRD 的“后台统一发放”实现。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ClaimRewardRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "领取结果",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ClaimRewardResponse" }
+              }
+            }
+          },
+          "409": { "description": "不满足领取条件或重复领取" }
+        }
+      }
+    },
+    "/learner/rewards": {
+      "get": {
+        "tags": ["Learner"],
+        "summary": "学习者：奖励记录列表",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "奖励记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedRewardRecordsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/creator/courses": {
+      "get": {
+        "tags": ["Creator"],
+        "summary": "作者：我的课程列表",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "example": "DRAFT" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "作者课程列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedCoursesResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Creator"],
+        "summary": "作者：创建课程",
+        "description": "作者端创建课程页面。链上 courseUid 可由合约创建后回填，或由后端生成 UID 并在上链时绑定。推荐：合约创建 courseId 为准。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateCourseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CourseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/courses/{id}": {
+      "put": {
+        "tags": ["Creator"],
+        "summary": "作者：编辑课程基础信息",
+        "description": "仅允许编辑非链上字段（如标题、简介、目录等）。价格/支付币种若上链后不允许改，需按合约规则限制。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "example": 1001 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateCourseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CourseResponse" }
+              }
+            }
+          },
+          "403": { "description": "非作者或无权限" }
+        }
+      }
+    },
+    "/creator/courses/{id}/contents": {
+      "post": {
+        "tags": ["Creator"],
+        "summary": "作者：新增/更新课程章节（目录/视频）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpsertContentsRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OkResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/courses/{id}/submit": {
+      "post": {
+        "tags": ["Creator"],
+        "summary": "作者：提交课程审核",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "提交成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OkResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/finance/income": {
+      "get": {
+        "tags": ["Creator"],
+        "summary": "作者：收益看板（课程收入索引）",
+        "description": "作者端收益管理页。后端从链上事件同步到 income_records，并聚合返回。",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": { "type": "string", "example": "2025-01-01" }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": { "type": "string", "example": "2025-12-31" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "收益汇总",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncomeDashboardResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/finance/aave/position": {
+      "get": {
+        "tags": ["Creator"],
+        "summary": "作者：AAVE 仓位信息",
+        "description": "作者端 AAVE 质押页。后端可通过链上读取并缓存到 aave_positions，返回仓位与 APY。",
+        "responses": {
+          "200": {
+            "description": "AAVE 仓位",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AavePositionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/admin/courses/pending": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "管理员：待审核课程列表",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "待审核课程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedCoursesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/courses/{id}/review": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "管理员：审核课程（通过/驳回）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ReviewCourseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "审核完成",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OkResponse" }
+              }
+            }
+          },
+          "400": { "description": "状态非法" }
+        }
+      }
+    },
+    "/admin/content/articles": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "管理员：文章列表（SEO/平台文章）",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文章列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedArticlesResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "管理员：创建/发布文章",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpsertArticleRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ArticleResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/homepage/recommendations": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "管理员：首页推荐配置读取",
+        "responses": {
+          "200": {
+            "description": "推荐配置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomepageRecommendationsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Admin"],
+        "summary": "管理员：首页推荐配置更新",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomepageRecommendationsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OkResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/logs": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "管理员：操作日志",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "日志列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedAdminLogsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "使用 /auth/login 获取 JWT 后放入 Authorization: Bearer <token>"
+      }
+    },
+    "schemas": {
+      "OkResponse": {
+        "type": "object",
+        "properties": { "ok": { "type": "boolean", "example": true } },
+        "required": ["ok"]
+      },
+
+      "NonceResponse": {
+        "type": "object",
+        "properties": {
+          "wallet": { "type": "string", "example": "0xAbC..." },
+          "nonce": { "type": "string", "example": "login-uuid-xxx" },
+          "expiredAt": { "type": "string", "format": "date-time" },
+          "messageToSign": {
+            "type": "string",
+            "example": "Web3U Login\nWallet: 0xAbC...\nNonce: login-uuid-xxx\nExpire: 2025-12-15T12:00:00Z"
+          }
+        },
+        "required": ["wallet", "nonce", "expiredAt", "messageToSign"]
+      },
+
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "wallet": { "type": "string", "example": "0xAbC..." },
+          "signature": { "type": "string", "example": "0xSignature..." }
+        },
+        "required": ["wallet", "signature"]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "example": "jwt-token" },
+          "user": { "$ref": "#/components/schemas/UserProfile" }
+        },
+        "required": ["token", "user"]
+      },
+
+      "UserProfile": {
+        "type": "object",
+        "properties": {
+          "walletAddress": { "type": "string", "example": "0xAbC..." },
+          "nickname": { "type": "string", "example": "Alice" },
+          "role": { "type": "string", "example": "USER" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["walletAddress", "role"]
+      },
+      "UserProfileResponse": {
+        "type": "object",
+        "properties": {
+          "user": { "$ref": "#/components/schemas/UserProfile" },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "purchasedCourses": { "type": "integer", "example": 3 },
+              "totalRewards": { "type": "string", "example": "120.5" }
+            }
+          }
+        },
+        "required": ["user"]
+      },
+
+      "UpdateNicknameRequest": {
+        "type": "object",
+        "properties": {
+          "nickname": { "type": "string", "example": "NewNick" },
+          "signature": { "type": "string", "example": "0xSignature..." }
+        },
+        "required": ["nickname", "signature"]
+      },
+
+      "Course": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1001 },
+          "courseUid": { "type": "string", "example": "course-001" },
+          "title": { "type": "string", "example": "Solidity 入门" },
+          "description": {
+            "type": "string",
+            "example": "从 0 到 1 掌握 Solidity"
+          },
+          "authorWallet": { "type": "string", "example": "0xAuthor..." },
+          "price": { "type": "string", "example": "100" },
+          "payToken": { "type": "string", "example": "YIDENG" },
+          "status": { "type": "string", "example": "PUBLISHED" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": [
+          "id",
+          "courseUid",
+          "title",
+          "authorWallet",
+          "price",
+          "payToken",
+          "status"
+        ]
+      },
+
+      "CourseContent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "title": { "type": "string", "example": "第 1 课：基础语法" },
+          "videoUrl": {
+            "type": "string",
+            "example": "https://cdn.example.com/xxx.m3u8"
+          },
+          "sortOrder": { "type": "integer", "example": 1 },
+          "locked": {
+            "type": "boolean",
+            "example": true,
+            "description": "未购买时是否锁定（前端展示用）"
+          }
+        }
+      },
+
+      "PagedCoursesResponse": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer", "example": 1 },
+          "pageSize": { "type": "integer", "example": 20 },
+          "total": { "type": "integer", "example": 100 },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Course" }
+          }
+        },
+        "required": ["page", "pageSize", "total", "items"]
+      },
+
+      "CourseDetailResponse": {
+        "type": "object",
+        "properties": {
+          "course": { "$ref": "#/components/schemas/Course" },
+          "contents": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CourseContent" }
+          },
+          "purchaseHint": {
+            "type": "object",
+            "description": "购买指引（链上交易由前端完成）",
+            "properties": {
+              "contractAddress": {
+                "type": "string",
+                "example": "0xCourseManager..."
+              },
+              "payTokenAddress": { "type": "string", "example": "0xYIDENG..." },
+              "approveSpender": {
+                "type": "string",
+                "example": "0xCourseManager..."
+              },
+              "buyMethod": {
+                "type": "string",
+                "example": "buyCourse(uint256 courseId)"
+              }
+            }
+          }
+        },
+        "required": ["course", "contents"]
+      },
+
+      "PurchasedCourse": {
+        "type": "object",
+        "properties": {
+          "courseUid": { "type": "string", "example": "course-001" },
+          "nftTokenId": { "type": "string", "example": "12345" },
+          "txHash": { "type": "string", "example": "0xTx..." },
+          "purchasedAt": { "type": "string", "format": "date-time" },
+          "course": { "$ref": "#/components/schemas/Course" }
+        }
+      },
+      "PagedPurchasedCoursesResponse": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "pageSize": { "type": "integer" },
+          "total": { "type": "integer" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PurchasedCourse" }
+          }
+        }
+      },
+
+      "CourseAccessResponse": {
+        "type": "object",
+        "properties": {
+          "courseUid": { "type": "string" },
+          "hasAccess": { "type": "boolean", "example": true },
+          "nftTokenId": {
+            "type": "string",
+            "nullable": true,
+            "example": "12345"
+          },
+          "source": {
+            "type": "string",
+            "example": "INDEX",
+            "description": "INDEX 或 CHAIN（若 chainVerify=true）"
+          }
+        },
+        "required": ["courseUid", "hasAccess", "source"]
+      },
+
+      "ReportProgressRequest": {
+        "type": "object",
+        "properties": {
+          "courseUid": { "type": "string", "example": "course-001" },
+          "progress": {
+            "type": "number",
+            "example": 85,
+            "description": "0~100"
+          },
+          "watchedSecondsDelta": {
+            "type": "integer",
+            "example": 60,
+            "description": "本次增量观看秒数（用于风控/反刷）"
+          }
+        },
+        "required": ["courseUid", "progress"]
+      },
+      "ProgressResponse": {
+        "type": "object",
+        "properties": {
+          "courseUid": { "type": "string" },
+          "progress": { "type": "number", "example": 85 },
+          "lastWatchAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["courseUid", "progress"]
+      },
+
+      "ClaimRewardRequest": {
+        "type": "object",
+        "properties": {
+          "rewardType": {
+            "type": "string",
+            "enum": ["COURSE", "DAILY"],
+            "example": "COURSE"
+          },
+          "courseUid": {
+            "type": "string",
+            "nullable": true,
+            "example": "course-001"
+          }
+        },
+        "required": ["rewardType"]
+      },
+      "ClaimRewardResponse": {
+        "type": "object",
+        "properties": {
+          "eligible": { "type": "boolean", "example": true },
+          "rewardAmount": { "type": "string", "example": "10" },
+          "txHash": {
+            "type": "string",
+            "nullable": true,
+            "example": "0xRewardTx..."
+          },
+          "message": { "type": "string", "example": "Reward sent" }
+        },
+        "required": ["eligible"]
+      },
+
+      "RewardRecord": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "rewardType": { "type": "string", "example": "COURSE" },
+          "courseUid": { "type": "string", "nullable": true },
+          "rewardAmount": { "type": "string", "example": "10" },
+          "txHash": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PagedRewardRecordsResponse": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "pageSize": { "type": "integer" },
+          "total": { "type": "integer" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RewardRecord" }
+          }
+        }
+      },
+
+      "CreateCourseRequest": {
+        "type": "object",
+        "properties": {
+          "courseUid": {
+            "type": "string",
+            "nullable": true,
+            "example": "course-001",
+            "description": "可选：若 courseUid 由合约生成，则后端创建后可为空，待回填"
+          },
+          "title": { "type": "string", "example": "Solidity 入门" },
+          "description": {
+            "type": "string",
+            "example": "从 0 到 1 掌握 Solidity"
+          },
+          "price": { "type": "string", "example": "100" },
+          "payToken": {
+            "type": "string",
+            "enum": ["YIDENG", "ETH"],
+            "example": "YIDENG"
+          }
+        },
+        "required": ["title", "price", "payToken"]
+      },
+      "UpdateCourseRequest": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "price": {
+            "type": "string",
+            "description": "若价格上链不可改，则后端应拒绝在 PUBLISHED 后修改"
+          },
+          "payToken": { "type": "string", "enum": ["YIDENG", "ETH"] }
+        }
+      },
+      "CourseResponse": {
+        "type": "object",
+        "properties": { "course": { "$ref": "#/components/schemas/Course" } },
+        "required": ["course"]
+      },
+      "UpsertContentsRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "nullable": true,
+                  "description": "为空表示新增"
+                },
+                "title": { "type": "string" },
+                "videoUrl": { "type": "string" },
+                "sortOrder": { "type": "integer" }
+              },
+              "required": ["title", "sortOrder"]
+            }
+          }
+        },
+        "required": ["items"]
+      },
+
+      "IncomeDashboardResponse": {
+        "type": "object",
+        "properties": {
+          "totalIncome": { "type": "string", "example": "1234.56" },
+          "byToken": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string", "example": "YIDENG" },
+                "amount": { "type": "string", "example": "1000" }
+              }
+            }
+          },
+          "byCourse": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "courseUid": { "type": "string", "example": "course-001" },
+                "amount": { "type": "string", "example": "300" }
+              }
+            }
+          }
+        }
+      },
+
+      "AavePositionResponse": {
+        "type": "object",
+        "properties": {
+          "walletAddress": { "type": "string" },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "asset": { "type": "string", "example": "USDT" },
+                "amount": { "type": "string", "example": "500" },
+                "aTokenBalance": { "type": "string", "example": "500.12" },
+                "apy": { "type": "number", "example": 3.25 }
+              }
+            }
+          }
+        },
+        "required": ["walletAddress", "positions"]
+      },
+
+      "ReviewCourseRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["PUBLISHED", "REJECTED"],
+            "example": "PUBLISHED"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "example": "内容不符合规范"
+          }
+        },
+        "required": ["status"]
+      },
+
+      "Article": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "status": { "type": "string", "example": "PUBLISHED" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "UpsertArticleRequest": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "example": "AAVE 入门指南" },
+          "content": { "type": "string", "example": "..." },
+          "status": {
+            "type": "string",
+            "enum": ["DRAFT", "PUBLISHED"],
+            "example": "PUBLISHED"
+          }
+        },
+        "required": ["title", "content", "status"]
+      },
+      "ArticleResponse": {
+        "type": "object",
+        "properties": { "article": { "$ref": "#/components/schemas/Article" } },
+        "required": ["article"]
+      },
+      "PagedArticlesResponse": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "pageSize": { "type": "integer" },
+          "total": { "type": "integer" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Article" }
+          }
+        }
+      },
+
+      "HomepageRecommendationsResponse": {
+        "type": "object",
+        "properties": {
+          "courseUids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["course-001", "course-002"]
+          }
+        },
+        "required": ["courseUids"]
+      },
+      "UpdateHomepageRecommendationsRequest": {
+        "type": "object",
+        "properties": {
+          "courseUids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["courseUids"]
+      },
+
+      "AdminLog": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "adminWallet": { "type": "string" },
+          "action": { "type": "string" },
+          "targetId": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PagedAdminLogsResponse": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "pageSize": { "type": "integer" },
+          "total": { "type": "integer" },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AdminLog" }
+          }
+        }
+      }
+    }
+  }
+}

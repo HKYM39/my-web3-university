@@ -1,0 +1,34 @@
+{
+  "name": "web3-university-monorepo",
+  "version": "0.0.1",
+  "description": "Web3大学, onorepo版本",
+  "private": true,
+  "scripts": {
+    "---------------- GENERIC ----------------": "",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "---------------- DEV (ALL) ----------------": "",
+    "dev": "turbo run dev --parallel",
+    "---------------- DEV (SINGLE) ----------------": "",
+    "dev:learner": "pnpm --filter @apps/web-learner dev",
+    "dev:admin": "pnpm --filter @apps/web-admin dev",
+    "dev:backend": "pnpm --filter @apps/backend dev",
+    "dev:chain": "pnpm --filter @web3-uni/chain dev",
+    "---------------- TOOLS ----------------": "",
+    "chain:compile": "pnpm --filter @web3-uni/chain compile",
+    "chain:deploy": "pnpm --filter @web3-uni/chain deploy",
+    "chain:test": "pnpm --filter @web3-uni/chain test"
+  },
+  "author": "HKYM39@outlook.com",
+  "packageManager": "pnpm@10.25.0",
+  "engines": {
+    "node": ">= 20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.2",
+    "turbo": "^2.6.3",
+    "typescript": "^5.9.3"
+  }
+}

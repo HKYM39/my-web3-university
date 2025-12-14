@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum UserRole {
+  LEARNER
+  CREATOR
+  ADMIN
+}
+
+enum CourseStatus {
+  DRAFT
+  REVIEWING
+  PUBLISHED
+  REJECTED
+}
+
+enum RewardType {
+  SIGN_IN
+  PROGRESS
+  COMPLETION
+}
+
+model User {
+  id         String    @id @default(uuid())
+  wallet     String    @unique
+  nonce      String
+  nickname   String?
+  role       UserRole  @default(LEARNER)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  courses    Course[]  @relation("CourseAuthor")
+  purchases  Purchase[]
+  progresses Progress[]
+  rewards    Reward[]
+  aavePositions AavePosition[]
+}
+
+model Course {
+  id          String        @id @default(uuid())
+  title       String
+  summary     String?
+  description String?
+  price       Decimal
+  status      CourseStatus  @default(DRAFT)
+  authorId    String
+  author      User          @relation("CourseAuthor", fields: [authorId], references: [id])
+  lessons     Lesson[]
+  purchases   Purchase[]
+  progresses  Progress[]
+  reviews     CourseReview[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Lesson {
+  id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id])
+  title       String
+  order       Int
+  videoUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([courseId, order])
+}
+
+model Purchase {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  txHash    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+}
+
+model Progress {
+  id           String   @id @default(uuid())
+  userId       String
+  courseId     String
+  progressPct  Int
+  secondsWatched Int
+  lastCheckpoint DateTime?
+  user         User     @relation(fields: [userId], references: [id])
+  course       Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+}
+
+model Reward {
+  id        String     @id @default(uuid())
+  userId    String
+  amount    Decimal
+  rewardType RewardType
+  reason     String?
+  txHash    String?
+  issuedAt  DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id])
+}
+
+model AavePosition {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String
+  supplied  Decimal
+  apyBps    Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, token])
+}
+
+model Article {
+  id        String   @id @default(uuid())
+  title     String
+  content   String?
+  authorId  String?
+  status    String   @default("draft")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HomeConfig {
+  id          String   @id @default(uuid())
+  featuredIds String[]
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  payload   Json?
+  createdAt DateTime @default(now())
+}
+
+model CourseReview {
+  id         String   @id @default(uuid())
+  courseId   String   @unique
+  reviewerId String?
+  status     CourseStatus
+  reason     String?
+  reviewedAt DateTime? @default(now())
+  course     Course   @relation(fields: [courseId], references: [id])
+}
