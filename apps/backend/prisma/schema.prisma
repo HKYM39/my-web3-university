@@ -1,163 +1,180 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
-  output   = "./generated"
+  output   = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-
 enum UserRole {
-  LEARNER
+  USER
   CREATOR
   ADMIN
 }
 
 enum CourseStatus {
   DRAFT
-  REVIEWING
+  PENDING
   PUBLISHED
   REJECTED
 }
 
+enum PayToken {
+  YIDENG
+  ETH
+}
+
 enum RewardType {
-  SIGN_IN
-  PROGRESS
-  COMPLETION
+  COURSE
+  DAILY
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
 }
 
 model User {
-  id         String    @id @default(uuid())
-  wallet     String    @unique
-  nonce      String
-  nickname   String?
-  role       UserRole  @default(LEARNER)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  courses    Course[]  @relation("CourseAuthor")
-  purchases  Purchase[]
-  progresses Progress[]
-  rewards    Reward[]
+  id            BigInt          @id @default(autoincrement()) @db.BigInt
+  walletAddress String          @unique @db.VarChar(64)
+  nickname      String?         @db.VarChar(64)
+  role          UserRole        @default(USER)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  nonce         UserNonce?
+  purchases     UserCourse[]
+  progresses    LearningProgress[]
+  rewards       RewardRecord[]
+  incomes       IncomeRecord[]  @relation("IncomeAuthor")
   aavePositions AavePosition[]
 }
 
+model UserNonce {
+  id            BigInt   @id @default(autoincrement()) @db.BigInt
+  walletAddress String   @unique @db.VarChar(64)
+  nonce         String   @db.VarChar(128)
+  expiredAt     DateTime
+  createdAt     DateTime @default(now())
+  user          User?    @relation(fields: [walletAddress], references: [walletAddress])
+}
+
 model Course {
-  id          String        @id @default(uuid())
-  title       String
-  summary     String?
-  description String?
-  price       Decimal
-  status      CourseStatus  @default(DRAFT)
-  authorId    String
-  author      User          @relation("CourseAuthor", fields: [authorId], references: [id])
-  lessons     Lesson[]
-  purchases   Purchase[]
-  progresses  Progress[]
-  reviews     CourseReview[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id            BigInt            @id @default(autoincrement()) @db.BigInt
+  courseUid     String            @unique @db.VarChar(64)
+  title         String            @db.VarChar(255)
+  description   String?           @db.Text
+  authorWallet  String            @db.VarChar(64)
+  price         Decimal           @db.Decimal(36, 18)
+  payToken      PayToken
+  status        CourseStatus      @default(DRAFT)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  contents      CourseContent[]
+  purchases     UserCourse[]
+  progresses    LearningProgress[]
+  rewardRecords RewardRecord[]
+  incomeRecords IncomeRecord[]
 }
 
-model Lesson {
-  id          String   @id @default(uuid())
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id])
-  title       String
-  order       Int
-  videoUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([courseId, order])
+model CourseContent {
+  id         BigInt   @id @default(autoincrement()) @db.BigInt
+  courseId   BigInt   @db.BigInt
+  title      String?  @db.VarChar(255)
+  videoUrl   String?  @db.Text
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  course     Course   @relation(fields: [courseId], references: [id])
 }
 
-model Purchase {
-  id        String   @id @default(uuid())
-  userId    String
-  courseId  String
-  txHash    String?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-  course    Course   @relation(fields: [courseId], references: [id])
+model UserCourse {
+  id            BigInt   @id @default(autoincrement()) @db.BigInt
+  walletAddress String   @db.VarChar(64)
+  courseUid     String   @db.VarChar(64)
+  nftTokenId    String   @db.VarChar(128)
+  txHash        String?  @db.VarChar(128)
+  createdAt     DateTime @default(now())
+  user          User?    @relation(fields: [walletAddress], references: [walletAddress])
+  course        Course   @relation(fields: [courseUid], references: [courseUid])
 
-  @@unique([userId, courseId])
+  @@unique([walletAddress, courseUid])
+  @@index([walletAddress])
+  @@index([courseUid])
 }
 
-model Progress {
-  id           String   @id @default(uuid())
-  userId       String
-  courseId     String
-  progressPct  Int
-  secondsWatched Int
-  lastCheckpoint DateTime?
-  user         User     @relation(fields: [userId], references: [id])
-  course       Course   @relation(fields: [courseId], references: [id])
+model LearningProgress {
+  id            BigInt    @id @default(autoincrement()) @db.BigInt
+  walletAddress String    @db.VarChar(64)
+  courseUid     String    @db.VarChar(64)
+  progress      Decimal   @db.Decimal(5, 2)
+  lastWatchAt   DateTime?
+  updatedAt     DateTime  @updatedAt
+  user          User?     @relation(fields: [walletAddress], references: [walletAddress])
+  course        Course?   @relation(fields: [courseUid], references: [courseUid])
 
-  @@unique([userId, courseId])
+  @@unique([walletAddress, courseUid])
 }
 
-model Reward {
-  id        String     @id @default(uuid())
-  userId    String
-  amount    Decimal
-  rewardType RewardType
-  reason     String?
-  txHash    String?
-  issuedAt  DateTime   @default(now())
-  user      User       @relation(fields: [userId], references: [id])
+model RewardRecord {
+  id            BigInt    @id @default(autoincrement()) @db.BigInt
+  walletAddress String    @db.VarChar(64)
+  courseUid     String?   @db.VarChar(64)
+  rewardAmount  Decimal   @db.Decimal(36, 18)
+  rewardType    RewardType
+  txHash        String?   @db.VarChar(128)
+  createdAt     DateTime  @default(now())
+  user          User?     @relation(fields: [walletAddress], references: [walletAddress])
+  course        Course?   @relation(fields: [courseUid], references: [courseUid])
+
+  @@index([walletAddress])
+}
+
+model IncomeRecord {
+  id           BigInt   @id @default(autoincrement()) @db.BigInt
+  courseUid    String?  @db.VarChar(64)
+  authorWallet String?  @db.VarChar(64)
+  amount       Decimal  @db.Decimal(36, 18)
+  token        String?  @db.VarChar(32)
+  txHash       String?  @db.VarChar(128)
+  createdAt    DateTime @default(now())
+  course       Course?  @relation(fields: [courseUid], references: [courseUid])
+  author       User?    @relation("IncomeAuthor", fields: [authorWallet], references: [walletAddress])
+
+  @@index([authorWallet])
 }
 
 model AavePosition {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String
-  supplied  Decimal
-  apyBps    Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@unique([userId, token])
+  id            BigInt    @id @default(autoincrement()) @db.BigInt
+  walletAddress String    @db.VarChar(64)
+  asset         String?   @db.VarChar(32)
+  amount        Decimal?  @db.Decimal(36, 18)
+  aTokenBalance Decimal?  @db.Decimal(36, 18)
+  apy           Decimal?  @db.Decimal(8, 4)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User?     @relation(fields: [walletAddress], references: [walletAddress])
 }
 
-model Article {
-  id        String   @id @default(uuid())
-  title     String
-  content   String?
-  authorId  String?
-  status    String   @default("draft")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model HomeConfig {
-  id          String   @id @default(uuid())
-  featuredIds String[]
-  updatedAt   DateTime @updatedAt
+model AdminLog {
+  id          BigInt   @id @default(autoincrement()) @db.BigInt
+  adminWallet String?  @db.VarChar(64)
+  action      String?  @db.VarChar(255)
+  targetId    String?  @db.VarChar(64)
   createdAt   DateTime @default(now())
 }
 
-model AuditLog {
-  id        String   @id @default(uuid())
-  actorId   String?
-  action    String
-  payload   Json?
-  createdAt DateTime @default(now())
+model Article {
+  id        BigInt        @id @default(autoincrement()) @db.BigInt
+  title     String        @db.VarChar(255)
+  content   String        @db.Text
+  status    ArticleStatus @default(DRAFT)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 }
 
-model CourseReview {
-  id         String   @id @default(uuid())
-  courseId   String   @unique
-  reviewerId String?
-  status     CourseStatus
-  reason     String?
-  reviewedAt DateTime? @default(now())
-  course     Course   @relation(fields: [courseId], references: [id])
+model HomepageConfig {
+  id         Int       @id @default(1)
+  courseUids String[]
+  updatedAt  DateTime  @updatedAt
 }
